@@ -7,6 +7,8 @@ import com.gdg.jwtpractice.dto.user.LoginRequestDto;
 import com.gdg.jwtpractice.dto.user.SignupRequestDto;
 import com.gdg.jwtpractice.dto.user.TokenDto;
 import com.gdg.jwtpractice.dto.user.UserInfoResponseDto;
+import com.gdg.jwtpractice.global.code.ErrorStatus;
+import com.gdg.jwtpractice.global.exception.GeneralException;
 import com.gdg.jwtpractice.global.jwt.TokenProvider;
 import com.gdg.jwtpractice.repository.UserRepository;
 import com.gdg.jwtpractice.repository.RefreshTokenRepository;
@@ -29,9 +31,7 @@ public class AuthService {
 
     // 회원가입
     public UserInfoResponseDto signup(SignupRequestDto requestDto) {
-        if (userRepository.existsByEmail(requestDto.email())) {
-            throw new IllegalArgumentException("이미 존재하는 이메일입니다.");
-        }
+        duplicateEmailValidation(requestDto.email());
 
         String encodedPassword = passwordEncoder.encode(requestDto.password());
 
@@ -45,13 +45,19 @@ public class AuthService {
         return UserInfoResponseDto.from(userRepository.save(user));
     }
 
+    private void duplicateEmailValidation(String email) {
+        if (userRepository.existsByEmail(email)) {
+            throw new GeneralException(ErrorStatus.USER_ALREADY_EXISTS);
+        }
+    }
+
     // 로그인 + 토큰 발급
     public TokenDto login(LoginRequestDto requestDto) {
         User user = userRepository.findByEmail(requestDto.email())
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 이메일입니다."));
+                .orElseThrow(() -> new GeneralException(ErrorStatus.USER_NOT_FOUND));
 
         if (!passwordEncoder.matches(requestDto.password(), user.getPassword())) {
-            throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
+            throw new GeneralException(ErrorStatus.INVALID_PASSWORD);
         }
 
         String accessToken = tokenProvider.createAccessToken(user.getId(), user.getEmail(), user.getRole().name());
@@ -77,25 +83,25 @@ public class AuthService {
     public TokenDto reissueAccessToken(String refreshToken) {
         // RefreshToken 유효성 검사
         if (!tokenProvider.validateToken(refreshToken)) {
-            throw new IllegalArgumentException("유효하지 않은 리프레시 토큰입니다.");
+            throw new GeneralException(ErrorStatus.REFRESH_TOKEN_INVALID);
         }
 
         Long userId = tokenProvider.getUserId(refreshToken);
 
         RefreshToken savedToken = refreshTokenRepository.findByUserId(userId)
-                .orElseThrow(() -> new IllegalArgumentException("저장된 리프레시 토큰이 없습니다."));
+                .orElseThrow(() -> new GeneralException(ErrorStatus.REFRESH_TOKEN_NOT_FOUND));
 
         if (!savedToken.getToken().equals(refreshToken)) {
-            throw new IllegalArgumentException("리프레시 토큰이 일치하지 않습니다.");
+            throw new GeneralException(ErrorStatus.REFRESH_TOKEN_MISMATCH);
         }
 
         if (savedToken.isExpired()) {
-            throw new IllegalArgumentException("리프레시 토큰이 만료되었습니다. 다시 로그인하세요.");
+            throw new GeneralException(ErrorStatus.REFRESH_TOKEN_EXPIRED);
         }
 
         // AccessToken 새로 발급
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 사용자입니다."));
+                .orElseThrow(() -> new GeneralException(ErrorStatus.USER_NOT_FOUND));
 
         String newAccessToken = tokenProvider.createAccessToken(
                 user.getId(),

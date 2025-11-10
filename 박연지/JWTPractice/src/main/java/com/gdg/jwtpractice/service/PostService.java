@@ -4,6 +4,8 @@ import com.gdg.jwtpractice.domain.Post;
 import com.gdg.jwtpractice.domain.User;
 import com.gdg.jwtpractice.dto.post.PostInfoResponseDto;
 import com.gdg.jwtpractice.dto.post.PostSaveRequestDto;
+import com.gdg.jwtpractice.global.code.ErrorStatus;
+import com.gdg.jwtpractice.global.exception.GeneralException;
 import com.gdg.jwtpractice.repository.PostRepository;
 import com.gdg.jwtpractice.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +24,7 @@ public class PostService {
     @Transactional
     public PostInfoResponseDto createPost(PostSaveRequestDto requestDto, Long userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("유저를 찾을 수 없습니다."));
+                .orElseThrow(() -> new GeneralException(ErrorStatus.USER_NOT_FOUND));
 
         Post post = Post.builder()
                 .title(requestDto.title())
@@ -45,17 +47,17 @@ public class PostService {
     @Transactional(readOnly = true)
     public PostInfoResponseDto findPostById(Long postId) {
         Post post = postRepository.findById(postId)
-                .orElseThrow(() -> new IllegalArgumentException("게시글을 찾을 수 없습니다."));
+                .orElseThrow(() -> new GeneralException(ErrorStatus.POST_NOT_FOUND));
         return PostInfoResponseDto.from(post);
     }
 
     @Transactional
     public PostInfoResponseDto updatePost(Long postId, PostSaveRequestDto requestDto, Long userId) {
         Post post = postRepository.findById(postId)
-                .orElseThrow(() -> new IllegalArgumentException("게시글을 찾을 수 없습니다."));
+                .orElseThrow(() -> new GeneralException(ErrorStatus.POST_NOT_FOUND));
 
         if (!post.getUser().getId().equals(userId)) {
-            throw new IllegalArgumentException("본인 게시글만 수정할 수 있습니다.");
+            throw new GeneralException(ErrorStatus.POST_ACCESS_DENIED);
         }
 
         post.update(requestDto.title(), requestDto.content());
@@ -65,10 +67,10 @@ public class PostService {
     @Transactional
     public void deletePost(Long postId, Long userId) {
         Post post = postRepository.findById(postId)
-                .orElseThrow(() -> new IllegalArgumentException("게시글을 찾을 수 없습니다."));
+                .orElseThrow(() -> new GeneralException(ErrorStatus.POST_NOT_FOUND));
 
         if (!post.getUser().getId().equals(userId)) {
-            throw new IllegalArgumentException("본인 게시글만 삭제할 수 있습니다.");
+            throw new GeneralException(ErrorStatus.POST_ACCESS_DENIED);
         }
 
         postRepository.delete(post);
